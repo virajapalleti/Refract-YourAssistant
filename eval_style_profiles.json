@@ -1,0 +1,52 @@
+{
+  "profile_1_concise_technical.txt": {
+    "avg_sentence_length": 7.3,
+    "vocabulary_richness": 0.593,
+    "flesch_kincaid_grade": 10.6,
+    "formality_score": 2.87,
+    "uses_analogies": false,
+    "uses_questions": false,
+    "avg_paragraph_length": 5.2,
+    "jargon_comfort": 0.265
+  },
+  "profile_2_verbose_explainer.txt": {
+    "avg_sentence_length": 91.2,
+    "vocabulary_richness": 0.41,
+    "flesch_kincaid_grade": 37.1,
+    "formality_score": 1.16,
+    "uses_analogies": true,
+    "uses_questions": false,
+    "avg_paragraph_length": 1.0,
+    "jargon_comfort": 0.104
+  },
+  "profile_3_structured_notetaker.txt": {
+    "avg_sentence_length": 15.7,
+    "vocabulary_richness": 0.48,
+    "flesch_kincaid_grade": 9.2,
+    "formality_score": 1.46,
+    "uses_analogies": false,
+    "uses_questions": true,
+    "avg_paragraph_length": 2.5,
+    "jargon_comfort": 0.132
+  },
+  "profile_4_casual_conversational.txt": {
+    "avg_sentence_length": 11.4,
+    "vocabulary_richness": 0.381,
+    "flesch_kincaid_grade": 4.6,
+    "formality_score": 0.54,
+    "uses_analogies": false,
+    "uses_questions": true,
+    "avg_paragraph_length": 3.2,
+    "jargon_comfort": 0.079
+  },
+  "profile_5_academic_formal.txt": {
+    "avg_sentence_length": 52.1,
+    "vocabulary_richness": 0.481,
+    "flesch_kincaid_grade": 28.7,
+    "formality_score": 2.84,
+    "uses_analogies": false,
+    "uses_questions": false,
+    "avg_paragraph_length": 2.6,
+    "jargon_comfort": 0.321
+  }
+}

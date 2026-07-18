@@ -1,28 +1,13 @@
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-
-# Jupyter Notebook
 .ipynb_checkpoints
-
-# PyCharm
 .idea/
-
-# VS Code
 .vscode/
-
-# macOS
 .DS_Store
-
-# ChromaDB data (can be large, better to regenerate)
 chroma_db/
-
-# API keys
 .env
-
-# Test output files
+venv/
 test_pdfs/*
 !test_pdfs/.gitkeep
-
 test_samples/*
 !test_samples/.gitkeep

@@ -4,23 +4,22 @@ Parses PDFs with pdfplumber, chunks by detected headings (falls back to
 paragraph-level splits), and stores chunks + metadata in ChromaDB.
 """
 
+import os
+import re
+import sys
+import statistics
+from dataclasses import dataclass, replace
+from typing import Optional
+
 import pdfplumber
 import chromadb
-import re
-import os
-from dataclasses import dataclass
-from typing import Optional
-from collections import Counter
+
 from config import CHROMA_PATH
 
-
-@dataclass
-class TextLine:
-    """A single line extracted from a PDF with font metadata."""
-    text: str
-    font_size: float
-    is_bold: bool
-    page_num: int
+LINE_TOLERANCE = 4  # px — chars within this vertical distance are the same line
+TARGET_CHUNK_SIZE = 1500  # chars, for paragraph fallback
+MIN_CHUNK_CHARS = 50
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 @dataclass
@@ -32,55 +31,41 @@ class Chunk:
     chunk_index: int
 
 
-class FallbackEmbedding:
-    """Simple hash-based embedding for dev. ChromaDB's default (ONNX MiniLM)
-    is better — it will work on your machine where the model can download.
-    To use the default, just remove the embedding_function arg from create_collection.
-    """
-
-    def __call__(self, input: list[str]) -> list[list[float]]:
-        embeddings = []
-        for text in input:
-            words = text.lower().split()
-            vec = [0.0] * 384
-            for word in words:
-                vec[hash(word) % 384] += 1.0
-            norm = sum(v * v for v in vec) ** 0.5
-            embeddings.append([v / norm if norm else 0.0 for v in vec])
-        return embeddings
+@dataclass
+class _Line:
+    """A single line extracted from a PDF with font metadata."""
+    text: str
+    size: float
+    is_bold: bool
+    page_num: int
+    top: float
 
 
 class PDFProcessor:
-    def __init__(self, chroma_path: str = CHROMA_PATH, use_fallback_embed: bool = False):
+    def __init__(self, chroma_path: str = CHROMA_PATH):
         self.chroma_client = chromadb.PersistentClient(path=chroma_path)
-        self.embed_fn = FallbackEmbedding() if use_fallback_embed else None
 
-    def process(self, pdf_path: str) -> list[Chunk]:
+    def process(self, pdf_path: str) -> list:
         """Main entry: parse PDF -> chunk -> store in ChromaDB -> return chunks."""
-        lines = self._extract_lines(pdf_path)
+        with pdfplumber.open(pdf_path) as pdf:
+            lines = self._extract_lines(pdf)
+            if not lines:
+                raise ValueError(f"No text extracted from {pdf_path}")
 
-        if not lines:
-            raise ValueError(f"No text extracted from {pdf_path}")
+            body_size = self._body_font_size(lines)
+            heading_lines = [l for l in lines if self._is_heading(l, body_size)]
 
-        body_size = self._get_body_font_size(lines)
-        heading_indices = self._detect_headings(lines, body_size)
+            if len(heading_lines) >= 2:
+                chunks = self._chunk_by_headings(lines, body_size)
+                method = "headings"
+            else:
+                chunks = self._chunk_by_paragraphs(pdf)
+                method = "paragraphs"
 
-        if len(heading_indices) >= 2:
-            chunks = self._chunk_by_headings(lines, heading_indices)
-            method = "headings"
-        else:
-            full_text = "\n".join(l.text for l in lines)
-            chunks = self._chunk_by_paragraphs(full_text, lines)
-            method = "paragraphs"
+        chunks = [c for c in chunks if len(c.text.strip()) >= MIN_CHUNK_CHARS]
+        chunks = [replace(c, chunk_index=i) for i, c in enumerate(chunks)]
 
-        # Drop tiny chunks
-        chunks = [c for c in chunks if len(c.text.strip()) > 50]
-        for i, chunk in enumerate(chunks):
-            chunk.chunk_index = i
-
-        collection_name = self._sanitize_collection_name(pdf_path)
-        self._store_in_chroma(chunks, collection_name)
-
+        self._store(chunks, pdf_path)
         print(f"[{method}] {len(chunks)} chunks from {os.path.basename(pdf_path)}")
         return chunks
 
@@ -88,210 +73,208 @@ class PDFProcessor:
     # Extraction
     # ------------------------------------------------------------------
 
-    def _extract_lines(self, pdf_path: str) -> list[TextLine]:
-        """Extract every line in the PDF with font size + bold metadata."""
-        all_lines: list[TextLine] = []
+    def _extract_lines(self, pdf) -> list:
+        """Group each page's chars into lines by vertical position."""
+        lines = []
+        for page_num, page in enumerate(pdf.pages, start=1):
+            chars = page.chars
+            if not chars:
+                continue
 
-        with pdfplumber.open(pdf_path) as pdf:
-            for page_num, page in enumerate(pdf.pages, start=1):
-                chars = page.chars
+            chars_sorted = sorted(chars, key=lambda c: c["top"])
+            groups = []
+            current_group = [chars_sorted[0]]
+            current_top = chars_sorted[0]["top"]
+            for c in chars_sorted[1:]:
+                if abs(c["top"] - current_top) <= LINE_TOLERANCE:
+                    current_group.append(c)
+                else:
+                    groups.append(current_group)
+                    current_group = [c]
+                    current_top = c["top"]
+            groups.append(current_group)
 
-                if not chars:
-                    # Scanned page or no char data — plain text fallback
-                    text = page.extract_text() or ""
-                    for line_text in text.split("\n"):
-                        if line_text.strip():
-                            all_lines.append(TextLine(line_text.strip(), 12.0, False, page_num))
+            for group in groups:
+                group_sorted = sorted(group, key=lambda c: c["x0"])
+                text = "".join(c["text"] for c in group_sorted).strip()
+                if not text:
                     continue
 
-                # Group chars into lines by vertical position
-                sorted_chars = sorted(chars, key=lambda c: (round(c["top"], 1), c["x0"]))
-                line_groups: list[list[dict]] = []
-                current: list[dict] = [sorted_chars[0]]
+                sizes = [round(c["size"], 1) for c in group_sorted]
+                try:
+                    size_mode = statistics.mode(sizes)
+                except statistics.StatisticsError:
+                    size_mode = sizes[0]
 
-                for char in sorted_chars[1:]:
-                    if abs(char["top"] - current[0]["top"]) < 4:
-                        current.append(char)
-                    else:
-                        line_groups.append(current)
-                        current = [char]
-                line_groups.append(current)
+                fontnames = [c["fontname"] for c in group_sorted]
+                try:
+                    fontname_mode = statistics.mode(fontnames)
+                except statistics.StatisticsError:
+                    fontname_mode = fontnames[0]
+                is_bold = "bold" in fontname_mode.lower()
 
-                for group in line_groups:
-                    group.sort(key=lambda c: c["x0"])
-                    text = "".join(c["text"] for c in group).strip()
-                    if not text:
-                        continue
-
-                    sizes = [c["size"] for c in group if c["text"].strip()]
-                    font_size = Counter(sizes).most_common(1)[0][0] if sizes else 12.0
-                    is_bold = any("Bold" in (c.get("fontname") or "") for c in group)
-
-                    all_lines.append(TextLine(text, font_size, is_bold, page_num))
-
-        return all_lines
+                lines.append(
+                    _Line(
+                        text=text,
+                        size=size_mode,
+                        is_bold=is_bold,
+                        page_num=page_num,
+                        top=group_sorted[0]["top"],
+                    )
+                )
+        return lines
 
     # ------------------------------------------------------------------
     # Heading detection
     # ------------------------------------------------------------------
 
-    def _get_body_font_size(self, lines: list[TextLine]) -> float:
-        sizes = [round(l.font_size, 1) for l in lines if l.text.strip()]
-        return Counter(sizes).most_common(1)[0][0] if sizes else 12.0
+    def _body_font_size(self, lines: list) -> float:
+        sizes = [l.size for l in lines]
+        if not sizes:
+            return 0.0
+        try:
+            return statistics.mode(sizes)
+        except statistics.StatisticsError:
+            return sizes[0]
 
-    def _detect_headings(self, lines: list[TextLine], body_size: float) -> list[int]:
-        """Return indices of lines that look like section headings."""
-        indices: list[int] = []
+    def _is_heading(self, line: "_Line", body_size: float) -> bool:
+        text = line.text.strip()
+        if not text:
+            return False
 
-        for i, line in enumerate(lines):
-            text = line.text.strip()
-            if not text or len(text) > 200:
-                continue
-
-            is_heading = False
-
-            # 1. Font size noticeably larger than body
-            if line.font_size > body_size * 1.15:
-                is_heading = True
-            # 2. ALL CAPS multi-word short line
-            elif text.isupper() and len(text) < 100 and " " in text:
-                is_heading = True
-            # 3. Bold + short + doesn't end with period
-            elif line.is_bold and len(text) < 80 and not text.endswith("."):
-                is_heading = True
-
-            if is_heading:
-                indices.append(i)
-
-        return indices
+        larger_font = body_size > 0 and line.size > body_size * 1.15
+        all_caps_multiword = text.isupper() and len(text.split()) > 1 and len(text) < 100
+        bold_short_no_period = line.is_bold and len(text) < 80 and not text.endswith(".")
+        return larger_font or all_caps_multiword or bold_short_no_period
 
     # ------------------------------------------------------------------
     # Chunking strategies
     # ------------------------------------------------------------------
 
-    def _chunk_by_headings(self, lines: list[TextLine], heading_indices: list[int]) -> list[Chunk]:
-        chunks: list[Chunk] = []
+    def _chunk_by_headings(self, lines: list, body_size: float) -> list:
+        heading_indices = [i for i, l in enumerate(lines) if self._is_heading(l, body_size)]
+        chunks = []
+        chunk_index = 0
 
-        # Text before the first heading
         if heading_indices[0] > 0:
-            pre = lines[: heading_indices[0]]
-            pre_text = "\n".join(l.text for l in pre).strip()
-            if len(pre_text) > 50:
-                chunks.append(Chunk(pre_text, pre[0].page_num, None, 0))
+            intro_lines = lines[: heading_indices[0]]
+            text = "\n".join(l.text for l in intro_lines).strip()
+            if len(text) >= MIN_CHUNK_CHARS:
+                chunks.append(
+                    Chunk(text=text, page_num=intro_lines[0].page_num, section_title=None, chunk_index=chunk_index)
+                )
+                chunk_index += 1
 
-        for i, h_idx in enumerate(heading_indices):
-            end_idx = heading_indices[i + 1] if i + 1 < len(heading_indices) else len(lines)
-            section_title = lines[h_idx].text.strip()
+        for idx, h_idx in enumerate(heading_indices):
+            heading_line = lines[h_idx]
+            end_idx = heading_indices[idx + 1] if idx + 1 < len(heading_indices) else len(lines)
             body_lines = lines[h_idx + 1 : end_idx]
-
-            if not body_lines:
-                continue
-
             text = "\n".join(l.text for l in body_lines).strip()
-            chunks.append(Chunk(text, lines[h_idx].page_num, section_title, len(chunks)))
+            if len(text) < MIN_CHUNK_CHARS:
+                continue
+            chunks.append(
+                Chunk(
+                    text=text,
+                    page_num=heading_line.page_num,
+                    section_title=heading_line.text.strip(),
+                    chunk_index=chunk_index,
+                )
+            )
+            chunk_index += 1
 
         return chunks
 
-    def _chunk_by_paragraphs(self, full_text: str, lines: list[TextLine]) -> list[Chunk]:
-        """Split on blank lines, merge small paragraphs, add 1-sentence overlap."""
-        paragraphs = re.split(r"\n\s*\n", full_text)
-        paragraphs = [p.strip() for p in paragraphs if len(p.strip()) > 30]
+    def _chunk_by_paragraphs(self, pdf) -> list:
+        """Split on blank lines, merge small paragraphs to ~1500 chars, add 1-sentence overlap."""
+        page_texts = [(i, page.extract_text() or "") for i, page in enumerate(pdf.pages, start=1)]
 
-        if not paragraphs:
-            return [Chunk(full_text.strip(), 1, None, 0)]
+        paragraphs = []
+        for page_num, text in page_texts:
+            for para in re.split(r"\n\s*\n", text):
+                para = para.strip()
+                if para:
+                    paragraphs.append((page_num, para))
 
-        # Merge small paragraphs to hit ~500-1500 chars per chunk
-        merged: list[str] = []
-        buf = ""
-        for para in paragraphs:
-            if len(buf) + len(para) < 1500:
-                buf += ("\n\n" + para if buf else para)
-            else:
-                if buf:
-                    merged.append(buf)
-                buf = para
-        if buf:
-            merged.append(buf)
+        groups = []
+        current_texts = []
+        current_page = None
+        current_len = 0
+        for page_num, para in paragraphs:
+            if current_page is None:
+                current_page = page_num
+            if current_texts and current_len + len(para) > TARGET_CHUNK_SIZE:
+                groups.append({"text": "\n\n".join(current_texts), "page_num": current_page})
+                current_texts = []
+                current_len = 0
+                current_page = page_num
+            current_texts.append(para)
+            current_len += len(para)
+        if current_texts:
+            groups.append({"text": "\n\n".join(current_texts), "page_num": current_page})
 
-        # Build chunks
-        chunks: list[Chunk] = []
-        for i, text in enumerate(merged):
-            page = self._estimate_page(text, lines)
-            chunks.append(Chunk(text, page, None, i))
-
-        # 1-sentence overlap between consecutive chunks
-        for i in range(1, len(chunks)):
-            prev_sentences = re.split(r"(?<=[.!?])\s+", chunks[i - 1].text)
-            if prev_sentences:
-                chunks[i].text = prev_sentences[-1] + " " + chunks[i].text
+        chunks = []
+        for idx, g in enumerate(groups):
+            text = g["text"]
+            if idx > 0:
+                prev_text = groups[idx - 1]["text"].strip()
+                sentences = SENTENCE_SPLIT_RE.split(prev_text)
+                overlap = sentences[-1].strip() if sentences else ""
+                if overlap:
+                    text = f"{overlap} {text}"
+            chunks.append(Chunk(text=text, page_num=g["page_num"], section_title=None, chunk_index=idx))
 
         return chunks
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Storage
     # ------------------------------------------------------------------
-
-    def _estimate_page(self, text_fragment: str, lines: list[TextLine]) -> int:
-        start = text_fragment[:60]
-        for line in lines:
-            if start.startswith(line.text[:40]):
-                return line.page_num
-        return 1
 
     def _sanitize_collection_name(self, pdf_path: str) -> str:
         name = os.path.splitext(os.path.basename(pdf_path))[0]
         name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)[:50]
         if not name or not name[0].isalnum():
             name = "doc_" + name
-        if not name[-1].isalnum():
-            name = name.rstrip("_-") or name + "0"
-        # ChromaDB requires length >= 3
         while len(name) < 3:
             name += "0"
         return name
 
-    def _store_in_chroma(self, chunks: list[Chunk], collection_name: str):
-        try:
-            self.chroma_client.delete_collection(name=collection_name)
-        except Exception:
-            pass
+    def _store(self, chunks: list, pdf_path: str):
+        collection_name = self._sanitize_collection_name(pdf_path)
+        collection = self.chroma_client.get_or_create_collection(name=collection_name)
 
-        kwargs = {"name": collection_name}
-        if self.embed_fn:
-            kwargs["embedding_function"] = self.embed_fn
-        collection = self.chroma_client.create_collection(**kwargs)
+        if not chunks:
+            return collection
 
-        collection.add(
+        collection.upsert(
+            ids=[f"chunk_{c.chunk_index}" for c in chunks],
             documents=[c.text for c in chunks],
             metadatas=[
                 {
                     "page_num": c.page_num,
-                    "section_title": c.section_title or "untitled",
+                    "section_title": c.section_title or "",
                     "chunk_index": c.chunk_index,
                 }
                 for c in chunks
             ],
-            ids=[f"chunk_{c.chunk_index}" for c in chunks],
         )
+        return collection
 
 
 # ------------------------------------------------------------------
-# CLI test
+# CLI
 # ------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import sys
-
     if len(sys.argv) < 2:
         print("Usage: python pdf_processor.py <pdf_path>")
         sys.exit(1)
 
-    processor = PDFProcessor(use_fallback_embed=True)
+    processor = PDFProcessor()
     chunks = processor.process(sys.argv[1])
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Total chunks: {len(chunks)}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     for chunk in chunks:
         title = chunk.section_title or "N/A"

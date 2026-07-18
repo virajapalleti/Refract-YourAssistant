@@ -1,0 +1,51 @@
+SAMPLE 1:
+Okay so let's talk about how your internet actually works, because honestly most people have no idea and that's totally fine.
+
+When you open a website, your computer has to find it first. Think about it — you type in a name, not a number, right? So your computer asks around to find the right number for that name. That's basically what's happening behind the scenes.
+
+Once it finds the right address, your computer says hi to the website's server. The server says hi back. Then you both agree you're ready to talk. It's kind of a whole thing just to load a page, but it happens so fast you never notice.
+
+Now here's a fun part. Your computer doesn't just blast all the data at once. Why not, you ask? Because that could overwhelm the connection and cause problems. So it starts slow, sends a bit, checks if that worked, then sends more. Pretty smart, right?
+
+What happens if something gets lost along the way? No big deal, really. Your computer just asks for it again. It happens more than you'd think, and you never even notice because it's all handled automatically.
+
+So next time a page loads instantly, just remember — there's a lot going on behind that "instant" moment. We just don't see any of it.
+
+SAMPLE 2:
+Ever wonder how apps find your info so fast? Like, you search for one thing and boom, there it is. How does that even work?
+
+Well, we can't just have the app look through everything one by one. That would take forever, especially if there's a ton of stuff stored. So instead, we build something called an index. It's basically a shortcut.
+
+Basically, the app already knows roughly where to look before it even starts looking. Cool, right? That's why searches feel instant even when there's tons of data behind the scenes.
+
+But here's the catch — do we just add a shortcut for everything? Nope! Every shortcut we add makes updates a little slower, because now we have to keep that shortcut up to date too. So it's a bit of a balancing act.
+
+You want fast searches, but you also don't want everything else to slow down because of it. That's the tradeoff we're always making when we design how data gets stored.
+
+What's the takeaway here? It's all about picking your battles. You look at what people search for the most, and you build shortcuts for those things. Everything else can just wait its turn.
+
+SAMPLE 3:
+So how does your laptop run a hundred things at once with just a few cores? Good question, right?
+
+Turns out, it doesn't actually run everything at the exact same time. It just switches between tasks really, really fast. So fast that it feels like everything's happening together, even though it's not.
+
+We call this switching, well, switching. Every little bit of time, the computer pauses one task, saves where it left off, and jumps to another one. Then it comes back later and picks up right where it stopped.
+
+Sounds simple, but is it free? Nope, not at all. Every switch costs a little time and effort. So if you switch too much, you actually waste more time switching than doing actual work. Kind of ironic, huh?
+
+That's why the system tries to be smart about it. It gives more time to stuff that seems important, and less to stuff that can wait. And if something's just sitting there waiting on your hard drive or the internet, it gets pushed aside so something else can use the CPU instead.
+
+Basically, your computer's juggling a ton of balls at once, and somehow it barely ever drops one. Pretty impressive when you think about it.
+
+SAMPLE 4:
+How does a computer actually learn something? Like, what does that even mean?
+
+Basically, we show it a bunch of examples, and it makes a guess. At first it's probably way off. So we tell it how wrong it was, and it adjusts itself a tiny bit to do better next time.
+
+We do this over and over, thousands of times, maybe way more. Each time it gets a little better at guessing. Eventually it starts getting things right more often than not.
+
+But how much should it change each time? That's actually a big deal. If it changes too much, it kind of overreacts and gets worse instead of better. If it barely changes at all, it takes forever to learn anything useful.
+
+So we have to find a sweet spot. Not too big, not too small. And honestly, we usually just try a few options and see what works best.
+
+Here's a fun twist though — what if it just memorizes all the examples instead of actually learning the pattern? Then it looks great on stuff it's already seen, but falls apart on anything new. So we always test it on stuff it hasn't seen before, just to make sure it's actually learning and not just memorizing.

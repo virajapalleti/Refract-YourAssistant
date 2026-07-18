@@ -1,0 +1,43 @@
+SAMPLE 1:
+TCP establishes connections through a three-way handshake. The client sends a SYN packet. The server responds with SYN-ACK. The client acknowledges with ACK. This sequence synchronizes initial sequence numbers. Both endpoints then enter the ESTABLISHED state.
+
+Congestion control prevents network collapse under heavy load. TCP Reno uses additive increase, multiplicative decrease. The congestion window grows linearly during avoidance. Packet loss triggers a window reduction by half. Slow start doubles the window each round-trip time. This continues until reaching the slow start threshold.
+
+Retransmission timeout is computed from round-trip time samples. The algorithm uses smoothed RTT and RTT variance. A retransmission occurs when the timer expires. Duplicate ACKs trigger fast retransmit after three repeats. Fast recovery avoids returning to slow start.
+
+Flow control operates independently of congestion control. The receive window advertises available buffer space. A zero window halts transmission entirely. The sender polls periodically with window probes. Modern stacks implement window scaling for high-bandwidth links. The scale factor is negotiated during the handshake.
+
+Selective acknowledgment improves recovery from multiple losses. SACK blocks report non-contiguous received segments. The sender retransmits only the missing ranges. This reduces unnecessary retransmissions significantly. Most production stacks enable SACK by default.
+
+SAMPLE 2:
+Relational databases rely on B-tree indexes for fast lookups. Each node stores sorted keys and child pointers. The tree remains balanced through splits and merges. Search complexity is logarithmic in the number of rows. Insertion may trigger a node split when full. A split promotes the median key to the parent.
+
+Leaf nodes typically link together in a chain. This supports efficient range scans. Composite indexes store multiple columns in one structure. Column order determines which queries can use the index. A query filtering on the second column alone cannot use it efficiently.
+
+Clustered indexes store row data directly in leaf nodes. Non-clustered indexes store pointers to the actual rows. Lookups through non-clustered indexes require an extra dereference step. This is called a bookmark lookup. Covering indexes avoid this step by including all needed columns.
+
+Write amplification increases with the number of indexes. Every insert or update touches each affected index. Index maintenance consumes significant I/O during heavy write loads. Database engines use write-ahead logs for durability. The log is flushed before the transaction commits.
+
+Query planners estimate cost using table statistics. Stale statistics lead to poor execution plans. Administrators schedule periodic statistics updates. Index fragmentation degrades performance over time. Rebuilding indexes restores sequential page layout.
+
+SAMPLE 3:
+Garbage collection reclaims memory no longer referenced by a program. Mark-and-sweep traverses object graphs from root references. Reachable objects are marked live. Unmarked objects are swept and freed. This process introduces pause times proportional to heap size.
+
+Generational collectors partition the heap by object age. Young generation objects are collected frequently. Most objects die young, following the generational hypothesis. Surviving objects are promoted to an older generation. Older generations are collected less frequently.
+
+Reference counting offers an alternative reclamation strategy. Each object tracks the number of active references. The count decrements when a reference goes out of scope. Zero count triggers immediate deallocation. Circular references are not reclaimed by simple reference counting.
+
+Compacting collectors reduce heap fragmentation. Live objects are relocated to contiguous memory. Pointers are updated after each move. This improves allocation speed for future objects. Compaction adds overhead during the collection cycle.
+
+Concurrent collectors run alongside the mutator thread. This reduces stop-the-world pause durations. Write barriers track mutations during concurrent marking. Tri-color marking prevents missed object updates. Modern JVMs default to low-pause concurrent collectors.
+
+SAMPLE 4:
+Neural networks learn through gradient-based optimization. Forward propagation computes activations layer by layer. Each layer applies a weighted sum and nonlinearity. The final layer produces predicted outputs. A loss function measures prediction error.
+
+Backpropagation computes gradients via the chain rule. Error signals propagate backward through the network. Each layer computes gradients with respect to its parameters. Gradients accumulate across the mini-batch. This determines the direction of steepest ascent.
+
+Gradient descent updates parameters opposite to the gradient. The learning rate scales the update magnitude. Too high a rate causes divergence. Too low a rate causes slow convergence. Adaptive optimizers adjust the rate per parameter.
+
+Momentum accelerates convergence in consistent gradient directions. It accumulates a velocity term across iterations. This dampens oscillation in ravine-shaped loss surfaces. Adam combines momentum with adaptive learning rates. It maintains running averages of gradients and their squares.
+
+Batch normalization stabilizes training across layers. It normalizes activations using batch statistics. This reduces internal covariate shift. Dropout regularizes networks by randomly zeroing activations. Both techniques improve generalization on unseen data.

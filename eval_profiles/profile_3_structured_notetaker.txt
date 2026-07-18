@@ -1,0 +1,78 @@
+SAMPLE 1:
+What actually happens when you type a URL into your browser? It's more involved than it looks. Here's the rundown:
+
+- DNS resolution: the domain name gets translated into an IP address
+- TCP handshake: SYN, SYN-ACK, ACK — three steps to open the connection
+- TLS negotiation: certificates get verified, keys get exchanged
+- HTTP request: the browser asks the server for the actual page
+
+But why does DNS resolution take so long sometimes? It depends on caching. If your browser or ISP already has the answer cached, it's nearly instant. If not, the request has to travel up the chain — from your local resolver, to a root server, to a TLD server, and finally to the authoritative server for that domain.
+
+Once the connection opens, how does data actually get exchanged reliably? This is where congestion control comes in. The sender doesn't just blast data — it ramps up gradually:
+
+- Slow start: window doubles each round trip
+- Congestion avoidance: window grows linearly instead
+- Fast retransmit: triggered after three duplicate ACKs
+
+Is packet loss always bad news? Not exactly — it's actually how the protocol learns the network's capacity. A dropped packet tells the sender to back off, which keeps the whole network from collapsing under too much traffic.
+
+So what's the takeaway here? Every web request is really a small negotiation — resolve the name, open the connection, secure it, then finally ask for the content. Miss a step and nothing loads.
+
+SAMPLE 2:
+Why do some queries fly while others crawl? Usually it comes down to indexing. Let's break down what's actually going on under the hood:
+
+- Table scans: the database reads every row — slow on large tables
+- Index seeks: the database jumps straight to matching rows — fast
+- Index scans: faster than a table scan, still reads more than necessary
+
+But how does the database decide which approach to use? That's the query planner's job. It looks at table statistics — row counts, value distributions — and estimates the cheapest path.
+
+What happens when those statistics go stale? Bad plans, basically. The planner might choose a table scan when an index seek would have been ten times faster, simply because it thinks the table is smaller than it actually is.
+
+Should you index every column just to be safe? Definitely not. Consider the tradeoffs:
+
+- More indexes mean faster reads
+- But every index slows down writes, since each one needs updating
+- And indexes take up disk space too
+
+So how do you decide what to index? Look at your actual query patterns — which columns show up in WHERE clauses, JOIN conditions, and ORDER BY clauses most often? Those are your candidates.
+
+Is there a golden rule here? Not really — it's a constant balancing act between read speed and write overhead, tuned to your specific workload.
+
+SAMPLE 3:
+How does an operating system juggle dozens of running programs on just a few CPU cores? Through scheduling. Here's what's involved:
+
+- Time slicing: each process gets a small slice of CPU time
+- Context switching: the CPU saves one process's state and loads another's
+- Priority levels: some processes get more CPU time than others
+
+But isn't context switching expensive? It is, actually — every switch means saving registers, flushing certain caches, and loading a new memory mapping. Too many switches and you lose more time switching than actually running anything.
+
+So how do schedulers avoid switching too often? A few common strategies:
+
+- Round robin: fixed time slices, simple and fair
+- Multilevel feedback queues: adjust priority based on behavior
+- Completely fair scheduler: tracks how much CPU time each process has "earned"
+
+What about processes that are just waiting on disk or network I/O? Do they still need CPU time? Not really — they get moved to a waiting state and the scheduler picks something else to run in the meantime, which is why I/O-heavy programs often feel more responsive than they "should" be.
+
+Why does any of this matter to a regular developer? Because scheduling decisions affect latency, throughput, and how predictable your program's performance is — especially under heavy load.
+
+SAMPLE 4:
+What does it actually mean for a model to "learn"? Basically, it's adjusting internal numbers until predictions get closer to reality. Here's the general loop:
+
+- Forward pass: input goes through the network, produces a prediction
+- Loss calculation: how wrong was that prediction?
+- Backward pass: figure out how each parameter contributed to the error
+- Update: nudge each parameter to reduce that error
+
+But how big should each nudge be? That's controlled by the learning rate. Too large, and — what happens? The model overshoots and never settles. Too small, and training crawls along forever.
+
+Why not just use the biggest learning rate that still works? Because "still works" is unstable — a rate that's fine on one batch might blow up on the next. That's part of why:
+
+- Learning rate schedules exist — start high, decay over time
+- Adaptive optimizers like Adam exist — adjust the rate per parameter automatically
+
+Does more training always mean a better model? Not necessarily. At some point the model starts memorizing training examples instead of learning general patterns — this is overfitting. How do you catch it? Watch the validation loss — if training loss keeps dropping but validation loss starts climbing, that's your signal to stop.
+
+What's the actual goal here? Not a model that's perfect on training data, but one that generalizes — that performs well on data it's never seen.
